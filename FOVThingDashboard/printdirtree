@@ -1,0 +1,1 @@
+--exclude-file *.pem *.crt *.png *.key *.ico *.json *.svg

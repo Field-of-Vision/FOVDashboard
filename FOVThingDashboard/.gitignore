@@ -1,0 +1,25 @@
+# env files (never commit real values)
+.env
+.env.*
+!.env.example
+.env.backend
+app/.env
+
+# certs / keys (AWS IoT etc.)
+app/aws-iot-certs/
+**/*.pem
+**/*.key
+**/*.crt
+
+# local DB & build outputs
+app/fov_dashboard.db
+__pycache__/
+*.pyc
+node_modules/
+dist/
+build/
+
+# IDE/editor junk
+.idea/
+*.zip
+dir_tree_prefs.json
