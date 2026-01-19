@@ -23,7 +23,7 @@ DEFAULT_REGION_BY_STADIUM = {
     "marvel": "ap-southeast-2",
 }
 
-def initialize_iot_client(client_id: str = "FOVTablet-Simulator") -> IOTClient:
+def initialize_iot_client(client_id: str = "FOVTablet-Simulator-123") -> IOTClient:
     iot_context = IOTContext()
     iot_credentials = IOTCredentials(
         cert_path=config.cert_path,
@@ -51,7 +51,7 @@ def main():
     # default device name based on stadium if not provided
     device = args.device or (f"fov-{stadium}-tablet-test-2")
 
-    iot_client = initialize_iot_client(client_id=f"FOVTabletSim-{stadium}-{device}")
+    iot_client = initialize_iot_client(client_id=f"FOVTabletSim-{stadium}-{device}-123")
 
 
     print(f"Connecting… endpoint={config.endpoint} stadium={stadium} region={region} device={device}")

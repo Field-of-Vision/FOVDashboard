@@ -1,12 +1,14 @@
 # stadiums_config.py
 
+# NOTE: Currently using Sydney (ap-southeast-2) certs only.
+# To add Dublin (eu-west-1), you'd need separate IoT clients with Dublin certs.
 STADIUMS = {
-    "aviva": {
-        "name": "Aviva Stadium",
-        "password": "temp123",
-        "region": "eu-west-1",
-        "iot_endpoint": "a3lkzcadhi1yzr-ats.iot.eu-west-1.amazonaws.com",
-    },
+    # "aviva": {
+    #     "name": "Aviva Stadium",
+    #     "password": "temp123",
+    #     "region": "eu-west-1",
+    #     "iot_endpoint": "a3lkzcadhi1yzr-ats.iot.eu-west-1.amazonaws.com",
+    # },
     "marvel": {
         "name": "Marvel Stadium",
         "password": "temp456",
