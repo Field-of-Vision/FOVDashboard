@@ -1,0 +1,13 @@
+# deploy.config - Copy to deploy.config.local and customize
+
+# Server connection
+DEPLOY_SERVER=root@your-server-ip
+DEPLOY_DIR=/opt/fovdashboard
+
+# Domain configuration
+DEPLOY_DOMAIN=fovdashboard.com
+DEPLOY_EMAIL=admin@example.com
+
+# Application ports
+BACKEND_PORT=8000
+FRONTEND_PORT=3000
