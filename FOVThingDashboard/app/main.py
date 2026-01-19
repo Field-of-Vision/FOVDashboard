@@ -48,6 +48,9 @@ relay_manager  = RelayManager()
 ALERT_GRACE_S = int(os.getenv("RELAY_OFFLINE_GRACE_S", "90"))
 _last_relay_alert_state: dict[str, bool] = {}  # remember prior state to avoid spam
 
+# Global event loop reference for thread-safe task scheduling
+_main_loop: Optional[asyncio.AbstractEventLoop] = None
+
 def send_email(subject: str, body: str) -> None:
     host = os.getenv("SMTP_HOST")
     port = int(os.getenv("SMTP_PORT", "587"))
@@ -114,6 +117,20 @@ def initialize_iot_client_for_endpoint(endpoint: str) -> IOTClient:
     )
     return IOTClient(iot_context, iot_credentials)
 
+def schedule_notification(device_name: str, device_data: dict, stadium: Optional[str] = None):
+    """
+    Thread-safe wrapper to schedule async WebSocket notifications from MQTT threads.
+    Uses asyncio.run_coroutine_threadsafe to avoid creating new event loops.
+    """
+    if _main_loop and not _main_loop.is_closed():
+        # Schedule coroutine to run in main event loop
+        asyncio.run_coroutine_threadsafe(
+            WebSocketManager.notify_clients(device_name, device_data, stadium=stadium),
+            _main_loop
+        )
+    else:
+        print("WARNING: Main event loop not available, skipping WebSocket notification")
+
 # --- message handler (tag stadium + pass it to WS) ---
 def message_handler(topic, payload, *a, **kw):
     try:
@@ -139,7 +156,7 @@ def message_handler(topic, payload, *a, **kw):
             device_data["stadium"] = stadium
 
         # Notify only relevant clients
-        asyncio.run(WebSocketManager.notify_clients(device_name, device_data, stadium=stadium))
+        schedule_notification(device_name, device_data, stadium=stadium)
 
     except Exception as e:
         print(f"Error handling message: {str(e)}")
@@ -193,7 +210,7 @@ def latency_echo_handler(topic, payload, *a, **kw):
                 state["stadium"] = stadium
 
         # Fan-out only to that stadium (admins always receive)
-        asyncio.run(WebSocketManager.notify_clients(dev, state, stadium=stadium))
+        schedule_notification(dev, state, stadium=stadium)
 
     except Exception as exc:
         print(f"latency-echo handler failed: {exc}")
@@ -261,9 +278,7 @@ def relay_handler(topic, payload, *a, **kw):
     rid  = topic.split('/')[2]              # fov/relay/<id>/heartbeat
     pkt  = json.loads(payload.decode())
     relay_manager.upsert(rid, pkt)
-    asyncio.run(
-        WebSocketManager.notify_clients(f"relay:{rid}", relay_manager.relays[rid], stadium=None)
-    )
+    schedule_notification(f"relay:{rid}", relay_manager.relays[rid], stadium=None)
 
 @app.get("/api/status")
 async def status():
@@ -522,6 +537,9 @@ async def check_system_status():
 
 @app.on_event("startup")
 async def startup_event():
+    global _main_loop
+    _main_loop = asyncio.get_running_loop()
+
     # Start IoT clients (per endpoint) in a background thread
     iot_thread = Thread(target=start_iot_client)
     iot_thread.daemon = False   # make it non-daemon so it keeps container alive

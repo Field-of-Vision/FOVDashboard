@@ -1,8 +1,0 @@
-**/__pycache__/
-**/.cache/
-**/node_modules/
-**/venv/
-*.pyc
-*.pyo
-*.pyd
-*.db
