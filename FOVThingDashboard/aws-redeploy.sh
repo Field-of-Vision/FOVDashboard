@@ -72,7 +72,7 @@ deactivate
 
 echo "--- Frontend build ---"
 cd ${REMOTE_DIR}/client
-npm install --silent
+npm install --silent --legacy-peer-deps
 npm run build
 
 echo "--- Fix permissions ---"

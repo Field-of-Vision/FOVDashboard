@@ -177,7 +177,7 @@ echo "✓ Backend dependencies installed"
 # --- Step 6: Install frontend dependencies and build ---
 echo_step "Installing frontend dependencies and building..."
 cd "$CLIENT_DIR"
-npm install
+npm install --legacy-peer-deps
 npm run build
 echo "✓ Frontend built"
 
