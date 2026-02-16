@@ -1,6 +1,6 @@
 from datetime import datetime
 from pathlib import Path   
-from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Index
+from sqlalchemy import create_engine, Column, Integer, String, Boolean, DateTime, ForeignKey, Index, UniqueConstraint, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 import os
@@ -12,7 +12,7 @@ class Device(Base):
     __tablename__ = 'devices'
     stadium = Column(String, nullable=False, index=True)
     id = Column(Integer, primary_key=True)
-    name = Column(String, unique=True, nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
     wifi_connected = Column(Boolean, default=False)
     last_message_time = Column(DateTime)
     first_seen = Column(DateTime, default=datetime.utcnow)
@@ -37,6 +37,7 @@ class Device(Base):
 
     __table_args__ = (
         Index('idx_device_last_message', 'last_message_time'),
+        UniqueConstraint('name', 'stadium', name='uq_device_name_stadium'),
     )
 
 
@@ -77,4 +78,21 @@ def init_db() -> sessionmaker:
 
     engine = create_engine(db_url, connect_args={"check_same_thread": False})
     Base.metadata.create_all(engine)
+
+    # Create the normalized view used by DeviceManager.get_device_history()
+    with engine.connect() as conn:
+        conn.execute(text("""
+            CREATE VIEW IF NOT EXISTS device_logs_norm AS
+            SELECT
+                dl.id            AS id,
+                dl.timestamp     AS ts,
+                d.name           AS device,
+                d.stadium        AS stadium,
+                dl.metric_type   AS metric,
+                dl.metric_value  AS value
+            FROM device_logs dl
+            JOIN devices d ON dl.device_id = d.id
+        """))
+        conn.commit()
+
     return sessionmaker(bind=engine, autoflush=False, autocommit=False)

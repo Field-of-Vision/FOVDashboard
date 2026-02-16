@@ -16,3 +16,4 @@ PyJWT==2.9.0
 passlib[bcrypt]>=1.7.4
 awscrt==0.21.1
 awsiotsdk==1.22.0
+python-dotenv>=1.0.0

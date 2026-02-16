@@ -3,9 +3,7 @@ import json
 import os
 import time
 import uuid
-from collections import defaultdict
-from datetime import timezone
-from fastapi import FastAPI, WebSocket, HTTPException, Depends, Response
+from fastapi import FastAPI, WebSocket, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.encoders import jsonable_encoder
 from datetime import datetime, timedelta
@@ -147,13 +145,7 @@ def message_handler(topic, payload, *a, **kw):
         device_name = parts[2]
         metric_type = parts[-1]
 
-        # Update device and get latest state (support both update_device signatures)
-        try:
-            device_data = device_manager.update_device(device_name, metric_type, stadium, message_str)
-        except TypeError:
-            # older signature: (name, metric, value)
-            device_data = device_manager.update_device(device_name, metric_type, message_str)
-            device_data["stadium"] = stadium
+        device_data = device_manager.update_device(device_name, metric_type, stadium, message_str)
 
         # Notify only relevant clients
         schedule_notification(device_name, device_data, stadium=stadium)
@@ -201,13 +193,7 @@ def latency_echo_handler(topic, payload, *a, **kw):
         rtt_ms = (time.time() - _pending_pings.pop(ping_id)) * 1000.0
         print(f"RTT {dev}: {rtt_ms:.1f} ms")
 
-        # Update device — prefer (name, metric, stadium, value), fall back to (name, metric, value)
-        try:
-            state = device_manager.update_device(dev, "latency", stadium, f"{rtt_ms:.2f}")
-        except TypeError:
-            state = device_manager.update_device(dev, "latency", f"{rtt_ms:.2f}")
-            if stadium:
-                state["stadium"] = stadium
+        state = device_manager.update_device(dev, "latency", stadium, f"{rtt_ms:.2f}")
 
         # Fan-out only to that stadium (admins always receive)
         schedule_notification(dev, state, stadium=stadium)
@@ -275,17 +261,21 @@ def start_iot_client():
 
 
 def relay_handler(topic, payload, *a, **kw):
-    rid  = topic.split('/')[2]              # fov/relay/<id>/heartbeat
-    pkt  = json.loads(payload.decode())
-    relay_manager.upsert(rid, pkt)
-    schedule_notification(f"relay:{rid}", relay_manager.relays[rid], stadium=None)
+    try:
+        rid  = topic.split('/')[2]              # fov/relay/<id>/heartbeat
+        pkt  = json.loads(payload.decode())
+        relay_manager.upsert(rid, pkt)
+        schedule_notification(f"relay:{rid}", relay_manager.relays[rid], stadium=None)
+    except (json.JSONDecodeError, IndexError) as e:
+        print(f"relay_handler error on topic '{topic}': {e}")
+    except Exception as e:
+        print(f"relay_handler unexpected error: {e}")
 
 @app.get("/api/status")
 async def status():
     """Return system status information for debugging"""
     import psutil
-    import os
-    
+
     # Check if certificates exist
     cert_files = {
         "cert_path": os.path.exists(config.cert_path),

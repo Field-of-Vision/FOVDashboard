@@ -1,24 +1,21 @@
 #!/usr/bin/env bash
-# bootstrap.sh - One-command setup & deploy on a fresh Digital Ocean droplet
+# bootstrap.sh - One-command setup & deploy on a fresh Ubuntu server (EC2 or DigitalOcean)
 #
 # Usage:
-#   1. Clone repo to droplet: git clone <repo> /opt/fovdashboard
-#   2. Copy AWS IoT certs to: /opt/fovdashboard/app/certs/sydney/
-#   3. Run: sudo ./bootstrap.sh --domain your-domain.com
+#   With domain + SSL:  sudo ./bootstrap.sh --domain=your-domain.com
+#   IP-only (no SSL):   sudo ./bootstrap.sh --ip-only
+#   IP-only (explicit):  sudo ./bootstrap.sh --domain=1.2.3.4 --skip-ssl
 #
-# This script will:
-#   - Install Python, Node, Nginx, Certbot
-#   - Create .env files with secure defaults
-#   - Install dependencies
-#   - Build frontend
-#   - Configure Nginx with SSL
-#   - Start systemd services
+# Prerequisites:
+#   1. Clone repo: git clone https://github.com/Field-of-Vision/FOVDashboard.git /opt/fovdashboard
+#   2. Copy AWS IoT certs to: /opt/fovdashboard/FOVThingDashboard/app/certs/sydney/
 
 set -euo pipefail
 
 # --- Configuration ---
-DOMAIN="${1#--domain=}"
-DOMAIN="${DOMAIN:-}"
+DOMAIN=""
+SKIP_SSL=""
+IP_ONLY=""
 INSTALL_DIR="$(cd "$(dirname "$0")" && pwd)"
 APP_DIR="$INSTALL_DIR/app"
 CLIENT_DIR="$INSTALL_DIR/client"
@@ -39,15 +36,26 @@ while [[ $# -gt 0 ]]; do
         --domain=*) DOMAIN="${1#*=}"; shift ;;
         --domain) DOMAIN="$2"; shift 2 ;;
         --skip-ssl) SKIP_SSL=1; shift ;;
+        --ip-only) IP_ONLY=1; SKIP_SSL=1; shift ;;
         *) shift ;;
     esac
 done
 
+# Auto-detect public IP if --ip-only
+if [[ -n "$IP_ONLY" && -z "$DOMAIN" ]]; then
+    DOMAIN=$(curl -sf http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || \
+             curl -sf https://ifconfig.me 2>/dev/null || \
+             hostname -I | awk '{print $1}')
+    echo "Auto-detected IP: $DOMAIN"
+fi
+
 if [[ -z "$DOMAIN" ]]; then
     echo "Usage: sudo ./bootstrap.sh --domain=your-domain.com"
+    echo "       sudo ./bootstrap.sh --ip-only"
     echo ""
     echo "Options:"
-    echo "  --domain=DOMAIN   Your domain name (required)"
+    echo "  --domain=DOMAIN   Your domain name or IP address"
+    echo "  --ip-only         Auto-detect public IP, skip SSL (for EC2)"
     echo "  --skip-ssl        Skip SSL certificate setup"
     exit 1
 fi
@@ -57,17 +65,32 @@ if [[ $EUID -ne 0 ]]; then
     echo_error "This script must be run as root (use sudo)"
 fi
 
+# Determine protocol based on SSL
+if [[ -n "$SKIP_SSL" ]]; then
+    HTTP_PROTO="http"
+    WS_PROTO="ws"
+else
+    HTTP_PROTO="https"
+    WS_PROTO="wss"
+fi
+
 echo "========================================="
 echo "FOV Dashboard Bootstrap"
 echo "========================================="
-echo "Domain: $DOMAIN"
+echo "Host: $DOMAIN"
+echo "Protocol: $HTTP_PROTO"
 echo "Install directory: $INSTALL_DIR"
 echo ""
 
 # --- Step 1: Install system dependencies ---
 echo_step "Installing system dependencies..."
 apt-get update
-apt-get install -y python3 python3-venv python3-pip nodejs npm nginx certbot python3-certbot-nginx curl
+apt-get install -y python3 python3-venv python3-pip nodejs npm nginx curl
+
+# Only install certbot if we'll use SSL
+if [[ -z "$SKIP_SSL" ]]; then
+    apt-get install -y certbot python3-certbot-nginx
+fi
 
 # Upgrade npm to latest
 npm install -g npm@latest
@@ -86,10 +109,10 @@ FOV_JWT_SECRET=$JWT_SECRET
 RELAY_OFFLINE_GRACE_S=90
 
 # AWS IoT Certificates
+IOT_ENDPOINT=a3lkzcadhi1yzr-ats.iot.ap-southeast-2.amazonaws.com
 IOT_CERT_PATH=./certs/sydney/certificate.pem.crt
 IOT_PRIVATE_KEY_PATH=./certs/sydney/private.pem.key
 IOT_ROOT_CA_PATH=./certs/sydney/AmazonRootCA1.pem
-IOT_ENDPOINT=a3lkzcadhi1yzr-ats.iot.ap-southeast-2.amazonaws.com
 
 # Email Alerts (optional)
 #SMTP_HOST=smtp.gmail.com
@@ -124,8 +147,8 @@ fi
 # --- Step 4: Create frontend .env.production ---
 echo_step "Creating frontend .env.production..."
 cat > "$CLIENT_DIR/.env.production" <<EOF
-REACT_APP_WS_BASE=wss://$DOMAIN/ws
-REACT_APP_API_BASE=https://$DOMAIN
+REACT_APP_WS_BASE=${WS_PROTO}://${DOMAIN}
+REACT_APP_API_BASE=${HTTP_PROTO}://${DOMAIN}
 EOF
 echo "✓ Frontend .env.production created"
 
@@ -149,7 +172,7 @@ echo "✓ Frontend built"
 # --- Step 7: Set permissions ---
 echo_step "Setting permissions..."
 chown -R www-data:www-data "$INSTALL_DIR"
-chmod +x "$INSTALL_DIR/scripts/"*.sh
+chmod +x "$INSTALL_DIR/scripts/"*.sh 2>/dev/null || true
 echo "✓ Permissions set"
 
 # --- Step 8: Install systemd services ---
@@ -202,24 +225,13 @@ echo "✓ Systemd services installed"
 
 # --- Step 9: Configure Nginx ---
 echo_step "Configuring Nginx..."
-cat > /etc/nginx/sites-available/fovdashboard <<EOF
+
+if [[ -n "$SKIP_SSL" ]]; then
+    # HTTP-only config (for IP access / no SSL)
+    cat > /etc/nginx/sites-available/fovdashboard <<NGINXEOF
 server {
     listen 80;
-    server_name $DOMAIN www.$DOMAIN;
-
-    # Redirect to HTTPS (Certbot will modify this)
-    location / {
-        return 301 https://\$host\$request_uri;
-    }
-}
-
-server {
-    listen 443 ssl;
-    server_name $DOMAIN www.$DOMAIN;
-
-    # SSL certificates (Certbot will add these)
-    # ssl_certificate /etc/letsencrypt/live/$DOMAIN/fullchain.pem;
-    # ssl_certificate_key /etc/letsencrypt/live/$DOMAIN/privkey.pem;
+    server_name $DOMAIN;
 
     # Frontend
     location / {
@@ -252,7 +264,57 @@ server {
         proxy_read_timeout 86400;
     }
 }
-EOF
+NGINXEOF
+else
+    # HTTPS config with redirect (for domain + SSL)
+    cat > /etc/nginx/sites-available/fovdashboard <<NGINXEOF
+server {
+    listen 80;
+    server_name $DOMAIN www.$DOMAIN;
+
+    # Redirect to HTTPS (Certbot will modify this)
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name $DOMAIN www.$DOMAIN;
+
+    # Frontend
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # Backend API
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    # WebSocket
+    location /ws {
+        proxy_pass http://127.0.0.1:8000/ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400;
+    }
+}
+NGINXEOF
+fi
 
 # Enable site
 ln -sf /etc/nginx/sites-available/fovdashboard /etc/nginx/sites-enabled/
@@ -271,7 +333,7 @@ if [[ -z "${SKIP_SSL:-}" ]]; then
         echo "  sudo certbot --nginx -d $DOMAIN"
     }
 else
-    echo_warn "Skipping SSL setup (--skip-ssl flag)"
+    echo_step "Skipping SSL setup (HTTP-only mode)"
 fi
 
 # --- Step 11: Start services ---
@@ -296,13 +358,12 @@ echo "========================================="
 echo "Bootstrap Complete!"
 echo "========================================="
 echo ""
-echo "Dashboard URL: https://$DOMAIN"
+echo "Dashboard URL: ${HTTP_PROTO}://${DOMAIN}"
 echo ""
 echo "Login credentials:"
-echo "  • admin / admin123 (all stadiums)"
-echo "  • aviva / temp123 (Aviva only)"
-echo "  • marvel / temp456 (Marvel only)"
-echo "  • kia / temp789 (Kia only)"
+echo "  - admin / admin123 (all stadiums)"
+echo "  - marvel / temp456 (Marvel only)"
+echo "  - kia / temp789 (Kia only)"
 echo ""
 echo "Useful commands:"
 echo "  Check status:    sudo systemctl status fov-backend fov-frontend"

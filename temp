@@ -1,0 +1,6 @@
+  1. Restart the backend (if using --reload, it should auto-restart)
+  2. Run the simulator:
+  cd FOVThingDashboard/app
+  python iot_device_simulator.py --stadium marvel
+  3. You should now see successful message processing in the backend logs (no more IntegrityError)
+  4. The device should appear on the dashboard

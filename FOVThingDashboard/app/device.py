@@ -42,13 +42,17 @@ class DeviceManager:
             "stadium": getattr(device, "stadium", None),
         }
 
-    def get_or_create_device(self, name: str) -> "Device":
+    def get_or_create_device(self, name: str, stadium: Optional[str] = None) -> "Device":
         session = self.session_factory()
         try:
-            device = session.query(Device).filter(Device.name == name).first()
+            query = session.query(Device).filter(Device.name == name)
+            if stadium:
+                query = query.filter(Device.stadium == stadium)
+            device = query.first()
             if not device:
                 device = Device(
                     name=name,
+                    stadium=stadium or "",
                     first_seen=datetime.utcnow(),
                     last_metric_values=json.dumps({})
                 )
@@ -79,9 +83,12 @@ class DeviceManager:
 
         session = self.session_factory()
         try:
-            device = session.query(Device).filter(Device.name == name).first()
+            query = session.query(Device).filter(Device.name == name)
+            if stadium:
+                query = query.filter(Device.stadium == stadium)
+            device = query.first()
             if not device:
-                device = Device(name=name, stadium=stadium, first_seen=datetime.utcnow())
+                device = Device(name=name, stadium=stadium or "", first_seen=datetime.utcnow())
                 session.add(device)
                 session.flush()
 
@@ -108,6 +115,8 @@ class DeviceManager:
                     actual_value = str(parsed.get("Battery_Percentage", parsed.get("Battery Percentage", 0)))
                 elif metric_type == "temperature":
                     actual_value = str(parsed.get("Temperature", 0))
+                elif metric_type == "version":
+                    actual_value = str(parsed.get("Version", parsed.get("version", actual_value)))
             except json.JSONDecodeError:
                 pass
 

@@ -29,12 +29,6 @@ type Props = {
   onUnauthorized?: () => void;
 };
 
-// map slugs to nice names
-const STADIUM_LABELS: Record<string, string> = {
-  aviva: "Aviva Stadium",
-  marvel: "Marvel Stadium",
-};
-
 // tiny JWT payload decoder
 function parseJwt(token: string | null) {
   if (!token) return null;
@@ -58,6 +52,7 @@ function parseJwt(token: string | null) {
 const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
   const [devices, setDevices] = useState<Record<string, Device>>({});
   const [relays, setRelays] = useState<Record<string, any>>({});
+  const [stadiumLabels, setStadiumLabels] = useState<Record<string, string>>({});
   const [connectionStatus, setConnectionStatus] = useState<string>('Connecting...');
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -73,7 +68,7 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
   const claims = parseJwt(token);
   const isAdmin = claims?.sub_type === "admin";
   const stadiumSlug: string | null = isAdmin ? null : (claims?.sub ?? null);
-  const stadiumName = stadiumSlug ? (STADIUM_LABELS[stadiumSlug] ?? stadiumSlug) : "";
+  const stadiumName = stadiumSlug ? (stadiumLabels[stadiumSlug] ?? stadiumSlug) : "";
 
   const connectWebSocket = () => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -146,6 +141,21 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
         const commonOpts: RequestInit = {
           headers: { Authorization: `Bearer ${token}` },
         };
+
+        // stadium labels (public endpoint, no auth needed)
+        try {
+          const labelsRes = await fetch(`${API_BASE}/api/meta/stadiums`);
+          if (labelsRes.ok) {
+            const data = await labelsRes.json();
+            const labels: Record<string, string> = {};
+            for (const [slug, info] of Object.entries(data)) {
+              labels[slug] = (info as any).name ?? slug;
+            }
+            setStadiumLabels(labels);
+          }
+        } catch {
+          // non-critical, fall back to slug
+        }
 
         // devices
         const devRes = await fetch(`${API_BASE}/api/devices`, commonOpts);

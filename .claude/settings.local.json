@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell -ExecutionPolicy Bypass -File .claude/block-delete-commands.ps1:*)",
+      "Bash(echo:*)",
+      "Bash(powershell -ExecutionPolicy Bypass -File:*)",
+      "Bash(dir:*)",
+      "Bash(pip install:*)",
+      "Bash(python main.py:*)",
+      "Bash(timeout:*)",
+      "Bash(curl:*)",
+      "Bash(ping:*)",
+      "Bash(npm install:*)",
+      "Bash(npm start)"
+    ]
+  }
+}
