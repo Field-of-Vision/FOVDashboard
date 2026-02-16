@@ -82,6 +82,19 @@ echo "Protocol: $HTTP_PROTO"
 echo "Install directory: $INSTALL_DIR"
 echo ""
 
+# --- Step 0: Ensure swap exists (React builds need >1GB RAM) ---
+if ! swapon --show | grep -q '/swapfile'; then
+    echo_step "Creating 2GB swap file..."
+    fallocate -l 2G /swapfile
+    chmod 600 /swapfile
+    mkswap /swapfile
+    swapon /swapfile
+    echo '/swapfile none swap sw 0 0' >> /etc/fstab
+    echo "  Swap enabled"
+else
+    echo_step "Swap already active"
+fi
+
 # --- Step 1: Install system dependencies ---
 echo_step "Installing system dependencies..."
 apt-get update
@@ -177,9 +190,13 @@ echo "✓ Backend dependencies installed"
 # --- Step 6: Install frontend dependencies and build ---
 echo_step "Installing frontend dependencies and building..."
 cd "$CLIENT_DIR"
-npm install --legacy-peer-deps
-npm run build
-echo "✓ Frontend built"
+if [[ -d "build" && -f "build/index.html" ]]; then
+    echo "✓ Pre-built frontend found, skipping build"
+else
+    npm install --legacy-peer-deps
+    npm run build
+    echo "✓ Frontend built"
+fi
 
 # --- Step 7: Set permissions ---
 echo_step "Setting permissions..."
