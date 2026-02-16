@@ -90,6 +90,9 @@ apt-get install -y python3 python3-venv python3-pip nginx curl ca-certificates g
 # Install Node.js 20 from NodeSource (Ubuntu default is too old)
 if ! node --version 2>/dev/null | grep -qE '^v(1[89]|[2-9][0-9])'; then
     echo "  Installing Node.js 20 from NodeSource..."
+    # Remove old Ubuntu Node.js packages that conflict with NodeSource
+    apt-get remove -y nodejs npm libnode-dev libnode72 2>/dev/null || true
+    apt-get autoremove -y 2>/dev/null || true
     mkdir -p /etc/apt/keyrings
     curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
