@@ -81,7 +81,7 @@ class DeviceManager:
         try:
             device = session.query(Device).filter(Device.name == name).first()
             if not device:
-                device = Device(name=name, first_seen=datetime.utcnow())
+                device = Device(name=name, stadium=stadium, first_seen=datetime.utcnow())
                 session.add(device)
                 session.flush()
 
