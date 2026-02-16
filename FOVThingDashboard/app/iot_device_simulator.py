@@ -40,7 +40,7 @@ def topic(region: str, stadium: str, device: str, metric: str) -> str:
 #ex: python iot_device_simulator.py --stadium aviva --region eu-west-1 --device fov-aviva-tablet-test-2
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--stadium", choices=["aviva", "marvel"], default="aviva")
+    parser.add_argument("--stadium", choices=["aviva", "marvel"], default="marvel")
     parser.add_argument("--region", help="AWS region for this stadium (defaults based on stadium)")
     parser.add_argument("--device", default=None, help="Device name to simulate")
     parser.add_argument("--interval", type=int, default=5, help="Seconds between telemetry publishes")
