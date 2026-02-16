@@ -94,7 +94,7 @@ if ! node --version 2>/dev/null | grep -qE '^v(1[89]|[2-9][0-9])'; then
     apt-get remove -y nodejs npm libnode-dev libnode72 2>/dev/null || true
     apt-get autoremove -y 2>/dev/null || true
     mkdir -p /etc/apt/keyrings
-    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --batch --yes --dearmor -o /etc/apt/keyrings/nodesource.gpg
     echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_20.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
     apt-get update
     apt-get install -y nodejs
