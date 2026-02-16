@@ -113,22 +113,35 @@ Phase 1 focuses on fixing all bugs. Phase 2 (AWS deployment) will be planned sep
 
 ### 2.4 - Deploy and verify
 - **Action:** Run `./aws-deploy.sh`, SCP certs, test with simulator
-- **Status:** [ ] Ready to run
+- **Instance:** i-0a7267749f5b9e67b, IP: 54.252.193.6 (ap-southeast-2)
+- **Result:** Backend connected to AWS IoT Core, simulator publishes messages, all endpoints working
+- **Status:** [x] Done
+
+### Deployment Notes
+- **t3.micro has only 1GB RAM** - not enough for React builds. Frontend must be built locally and SCP'd to server.
+- **bootstrap.sh** creates a 2GB swap file and skips frontend build if `client/build/` already exists.
+- **aws-redeploy.sh** builds frontend locally, then syncs code + build to server via rsync/scp.
+- **IP changes on stop/start** - use an Elastic IP if you need a stable address.
 
 ### Deployment Steps
 ```bash
 # 1. From FOVThingDashboard/ directory:
 ./aws-deploy.sh
 
-# 2. Wait ~5 min for bootstrap, then SCP certs:
-scp -i fov-dashboard-key.pem -r app/certs/sydney/ ubuntu@<IP>:/tmp/certs/
-ssh -i fov-dashboard-key.pem ubuntu@<IP> 'sudo mkdir -p /opt/fovdashboard/FOVThingDashboard/app/certs/sydney && sudo cp /tmp/certs/* /opt/fovdashboard/FOVThingDashboard/app/certs/sydney/ && sudo chown -R www-data:www-data /opt/fovdashboard/FOVThingDashboard/app/certs'
+# 2. Wait ~5 min for bootstrap, then build frontend locally and SCP:
+cd client && npm run build && cd ..
+scp -i fov-dashboard-key.pem -r client/build ubuntu@<IP>:/tmp/client-build
+ssh -i fov-dashboard-key.pem ubuntu@<IP> 'sudo cp -r /tmp/client-build /opt/fovdashboard/FOVThingDashboard/client/build && sudo chown -R www-data:www-data /opt/fovdashboard/FOVThingDashboard/client/build && sudo systemctl restart fov-frontend'
 
-# 3. Restart backend:
+# 3. SCP AWS IoT certs:
+scp -i fov-dashboard-key.pem app/certs/sydney/certificate.pem.crt app/certs/sydney/private.pem.key app/certs/sydney/AmazonRootCA1.pem ubuntu@<IP>:/tmp/
+ssh -i fov-dashboard-key.pem ubuntu@<IP> 'sudo mkdir -p /opt/fovdashboard/FOVThingDashboard/app/certs/sydney && sudo cp /tmp/certificate.pem.crt /tmp/private.pem.key /tmp/AmazonRootCA1.pem /opt/fovdashboard/FOVThingDashboard/app/certs/sydney/ && sudo chown -R www-data:www-data /opt/fovdashboard/FOVThingDashboard/app/certs'
+
+# 4. Restart backend:
 ssh -i fov-dashboard-key.pem ubuntu@<IP> 'sudo systemctl restart fov-backend'
 
-# 4. Open http://<IP> in browser
+# 5. Open http://<IP> in browser
 
-# 5. For code updates:
+# 6. For code updates:
 ./aws-redeploy.sh <IP>
 ```
