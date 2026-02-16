@@ -37,6 +37,13 @@ from auth import (
 # stadiums (NEW)
 from stadiums_config import STADIUMS
 
+# Reverse lookup: relay MQTT id → stadium slug
+RELAY_TO_STADIUM = {
+    st["relay_id"]: slug
+    for slug, st in STADIUMS.items()
+    if "relay_id" in st
+}
+
 app = FastAPI()
 SessionFactory = init_db()
 device_manager = DeviceManager(SessionFactory)
@@ -264,8 +271,10 @@ def relay_handler(topic, payload, *a, **kw):
     try:
         rid  = topic.split('/')[2]              # fov/relay/<id>/heartbeat
         pkt  = json.loads(payload.decode())
+        stadium = RELAY_TO_STADIUM.get(rid)
         relay_manager.upsert(rid, pkt)
-        schedule_notification(f"relay:{rid}", relay_manager.relays[rid], stadium=None)
+        relay_manager.relays[rid]["stadium"] = stadium  # tag for filtering
+        schedule_notification(f"relay:{rid}", relay_manager.relays[rid], stadium=stadium)
     except (json.JSONDecodeError, IndexError) as e:
         print(f"relay_handler error on topic '{topic}': {e}")
     except Exception as e:
@@ -327,7 +336,13 @@ def health():
 # --- meta: stadium names for UI labels (NEW, optional) ---
 @app.get("/api/meta/stadiums")
 def meta_stadiums():
-    return {slug: {"name": st.get("name", slug)} for slug, st in STADIUMS.items()}
+    return {
+        slug: {
+            "name": st.get("name", slug),
+            "relay_id": st.get("relay_id"),
+        }
+        for slug, st in STADIUMS.items()
+    }
 
 # --- WebSocket: REQUIRE JWT via ?token=... and filter initial state (changed) ---
 @app.websocket("/ws")

@@ -14,6 +14,7 @@ STADIUMS = {
         "password": "temp456",
         "region": "ap-southeast-2",
         "iot_endpoint": "a3lkzcadhi1yzr-ats.iot.ap-southeast-2.amazonaws.com",
+        "relay_id": "championdata",
     },
     "kia": {
         "name": "Kia Arena",
