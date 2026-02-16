@@ -210,41 +210,83 @@ fov-frontend: npx serve -s build -l 3000  (from client/ directory)
 
 ### How to Deploy Code to Production
 
-**There is NO automatic deployment.** Pushing to GitHub does NOT update the server. You must manually run the deploy script from your local machine.
+**There is NO automatic deployment.** Pushing to GitHub does NOT update the server. You must manually deploy.
 
 **Prerequisites:**
-- `fov-dashboard-key.pem` in the repo root (or specify path with `--key`)
-- Node.js 18+ installed locally (the script builds the frontend on your machine)
-- SSH access working: `ssh -i fov-dashboard-key.pem ubuntu@54.153.141.18`
+- `fov-dashboard-key.pem` — located at `FOVThingDashboard/fov-dashboard-key.pem` (gitignored). If missing, get it from a team member (see [Onboarding](#onboarding--new-team-member-setup)).
+- Node.js 18+ installed locally (the frontend must be built on your machine — the t3.micro EC2 doesn't have enough RAM)
+- `rsync` available (Linux/Mac have it by default; **Windows users** need WSL, Git Bash with rsync, or use the manual steps below)
+- SSH access working: `ssh -i FOVThingDashboard/fov-dashboard-key.pem ubuntu@54.153.141.18`
 
-**To deploy:**
+#### Option A: Deploy Script (Linux/Mac, or WSL on Windows)
 
 ```bash
 # From the repo root:
 ./FOVThingDashboard/aws-redeploy.sh 54.153.141.18
 
 # Or with explicit key path:
-./FOVThingDashboard/aws-redeploy.sh 54.153.141.18 --key /path/to/fov-dashboard-key.pem
+./FOVThingDashboard/aws-redeploy.sh 54.153.141.18 --key FOVThingDashboard/fov-dashboard-key.pem
 ```
 
 That single command does everything:
-1. Builds the React frontend locally (`npm run build`) — the t3.micro EC2 doesn't have enough RAM to build
+1. Builds the React frontend locally (`npm run build`)
 2. Rsyncs your local codebase + build output to the server (excludes node_modules, .git, .env, certs, .db, venv)
 3. SSHs to the server: installs any new Python deps, fixes permissions, restarts `fov-backend` + `fov-frontend` systemd services
 4. Runs a health check against `/api/health`
 
-**The script deploys whatever is in your local working directory**, not what's on GitHub. So commit + push first to keep the repo in sync:
+**The script deploys whatever is in your local working directory**, not what's on GitHub. So commit + push first to keep the repo in sync.
+
+#### Option B: Manual Deploy (Windows without WSL, or if the script fails)
 
 ```bash
-git add -A && git commit -m "your message"
-git push origin main
-./FOVThingDashboard/aws-redeploy.sh 54.153.141.18
+# 1. Make sure .env.production has the right URLs
+#    (the deploy script overwrites this, so check it):
+#    REACT_APP_WS_BASE=wss://fovdashboard.com
+#    REACT_APP_API_BASE=https://fovdashboard.com
+
+# 2. Build the frontend locally
+cd FOVThingDashboard/client
+npm install --legacy-peer-deps
+npm run build
+cd ../..
+
+# 3. Tar up the project (excluding large/sensitive dirs)
+cd FOVThingDashboard
+tar czf /tmp/fov-deploy.tar.gz \
+    --exclude='node_modules' --exclude='.git' --exclude='*.db' \
+    --exclude='venv' --exclude='app/.env' --exclude='app/certs' \
+    --exclude='client/.env.production' --exclude='dashboard-sensitive-files' \
+    --exclude='__pycache__' .
+
+# 4. Copy to server and extract
+scp -i fov-dashboard-key.pem /tmp/fov-deploy.tar.gz ubuntu@54.153.141.18:/tmp/
+ssh -i fov-dashboard-key.pem ubuntu@54.153.141.18 bash <<'EOF'
+  set -e
+  cd /opt/fovdashboard/FOVThingDashboard
+  sudo tar xzf /tmp/fov-deploy.tar.gz
+  cd app && source venv/bin/activate && pip install -q -r requirements.txt && deactivate
+  sudo chown -R www-data:www-data /opt/fovdashboard/FOVThingDashboard
+  sudo systemctl restart fov-backend fov-frontend
+  sleep 3
+  curl -sf http://127.0.0.1:8000/api/health && echo "Backend healthy" || echo "HEALTH CHECK FAILED"
+EOF
 ```
 
-**Verify after deploy:**
+#### Recommended Full Deploy Flow
+
+```bash
+# Commit, push to GitHub, then deploy:
+git add -A && git commit -m "your message"
+git push origin main
+./FOVThingDashboard/aws-redeploy.sh 54.153.141.18   # Linux/Mac
+# OR use Option B manual steps above                  # Windows
+```
+
+#### Verify After Deploy
+
 - `https://fovdashboard.com` — dashboard should load
 - `https://fovdashboard.com/api/health` — should return `{"status": "ok"}`
-- Check server logs if something is wrong: `ssh -i fov-dashboard-key.pem ubuntu@54.153.141.18 'sudo journalctl -u fov-backend -n 50 --no-pager'`
+- Check server logs if something is wrong: `ssh -i FOVThingDashboard/fov-dashboard-key.pem ubuntu@54.153.141.18 'sudo journalctl -u fov-backend -n 50 --no-pager'`
 
 ### Nginx Config (Production)
 
