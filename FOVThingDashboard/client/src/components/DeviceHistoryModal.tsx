@@ -75,11 +75,11 @@ const DeviceHistoryModal: React.FC<DeviceHistoryModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-lg w-full max-w-2xl max-h-[80vh] overflow-hidden">
-        <div className="p-4 border-b flex justify-between items-center">
-          <h2 className="text-xl font-semibold">{deviceName} History</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-full">
+    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl border border-blue-100">
+        <div className="p-4 border-b border-blue-100 flex justify-between items-center">
+          <h2 className="text-xl font-semibold text-gray-800">{deviceName} History</h2>
+          <button onClick={onClose} className="p-2 hover:bg-blue-50 rounded-full transition-colors">
             <X className="h-5 w-5" />
           </button>
         </div>

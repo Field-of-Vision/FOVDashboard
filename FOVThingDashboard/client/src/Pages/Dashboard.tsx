@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
 import DeviceComponent from '../components/DeviceComponent';
-import ChampionRelay from '../components/ChampionRelay';
+import RelayIndicator from '../components/RelayIndicator';
 import '../index.css';
 import { API_BASE, WS_BASE } from "../config";
 
@@ -52,7 +52,7 @@ function parseJwt(token: string | null) {
 const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
   const [devices, setDevices] = useState<Record<string, Device>>({});
   const [relays, setRelays] = useState<Record<string, any>>({});
-  const [stadiumLabels, setStadiumLabels] = useState<Record<string, string>>({});
+  const [stadiumMeta, setStadiumMeta] = useState<Record<string, { name: string; relay_id?: string }>>({});
   const [connectionStatus, setConnectionStatus] = useState<string>('Connecting...');
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -68,7 +68,7 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
   const claims = parseJwt(token);
   const isAdmin = claims?.sub_type === "admin";
   const stadiumSlug: string | null = isAdmin ? null : (claims?.sub ?? null);
-  const stadiumName = stadiumSlug ? (stadiumLabels[stadiumSlug] ?? stadiumSlug) : "";
+  const stadiumName = stadiumSlug ? (stadiumMeta[stadiumSlug]?.name ?? stadiumSlug) : "";
 
   const connectWebSocket = () => {
     if (ws.current?.readyState === WebSocket.OPEN) return;
@@ -142,16 +142,17 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
           headers: { Authorization: `Bearer ${token}` },
         };
 
-        // stadium labels (public endpoint, no auth needed)
+        // stadium metadata (public endpoint, no auth needed)
         try {
           const labelsRes = await fetch(`${API_BASE}/api/meta/stadiums`);
           if (labelsRes.ok) {
             const data = await labelsRes.json();
-            const labels: Record<string, string> = {};
+            const meta: Record<string, { name: string; relay_id?: string }> = {};
             for (const [slug, info] of Object.entries(data)) {
-              labels[slug] = (info as any).name ?? slug;
+              const i = info as any;
+              meta[slug] = { name: i.name ?? slug, relay_id: i.relay_id ?? undefined };
             }
-            setStadiumLabels(labels);
+            setStadiumMeta(meta);
           }
         } catch {
           // non-critical, fall back to slug
@@ -190,35 +191,30 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
   const queryLc = query.trim().toLowerCase();
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 p-4 space-y-6">
-      {/* Stadium Pattern Overlay */}
-      <div className="fixed inset-0 opacity-5 pointer-events-none">
-        <div className="absolute inset-0" style={{
-          backgroundImage: `radial-gradient(circle at 25% 25%, white 2px, transparent 2px),
-                           radial-gradient(circle at 75% 75%, white 2px, transparent 2px)`,
-          backgroundSize: '50px 50px'
-        }}></div>
-      </div>
-
-      <div className="relative z-10">
-        <ChampionRelay
-          data={relays["championdata"]}
+    <div className="min-h-screen bg-blue-50 p-4 space-y-6">
+      <div className="relative">
+        <RelayIndicator
+          entries={
+            Object.entries(stadiumMeta)
+              .filter(([slug, meta]) => {
+                if (!meta.relay_id) return false;
+                if (isAdmin) return true;
+                return slug === stadiumSlug;
+              })
+              .map(([_, meta]) => ({
+                stadiumName: meta.name,
+                alive: relays[meta.relay_id!]?.alive ?? false,
+                lastSeen: relays[meta.relay_id!]?.last_seen ?? null,
+              }))
+          }
           wsConnected={connectionStatus === "Connected"}
         />
 
         {/* Enhanced Header */}
         <div className="text-center mb-8 mt-8">
-          <div className="inline-flex items-center gap-3 mb-2">
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <div className="w-4 h-4 border-2 border-white rounded-full"></div>
-            </div>
-            <h1 className="text-3xl font-bold text-white tracking-wide">
-              {isAdmin ? "Admin Device Overview" : `${stadiumName} Control Hub`}
-            </h1>
-            <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center">
-              <div className="w-4 h-4 border-2 border-white rounded-full"></div>
-            </div>
-          </div>
+          <h1 className="text-3xl font-bold text-slate-800 tracking-wide">
+            {isAdmin ? "Admin Device Overview" : `${stadiumName} Control Hub`}
+          </h1>
         </div>
 
         {/* Enhanced Control Panel */}
@@ -229,13 +225,13 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
           const allCount = deviceEntries.length;
 
           return (
-            <div className="bg-white/95 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20" mx-8>
+            <div className="bg-white rounded-2xl p-6 shadow-sm border border-blue-100 mx-8">
               {/* Controls Row */}
               <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 {/* Status Filter Buttons */}
                 <div className="flex gap-3">
                   {([
-                    { key: "all" as const, label: `All`, count: allCount, color: "bg-gray-600" },
+                    { key: "all" as const, label: `All`, count: allCount, color: "bg-blue-600" },
                     { key: "online" as const, label: `Online`, count: onlineCount, color: "bg-green-600" },
                     { key: "offline" as const, label: `Offline`, count: offlineCount, color: "bg-red-600" }
                   ]).map(({ key, label, count, color }) => (
@@ -263,7 +259,7 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
                       value={query}
                       onChange={(e) => setQuery(e.target.value)}
                       placeholder="Search devices, stadiums, firmware..."
-                      className="w-full sm:w-80 pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-emerald-500 focus:outline-none transition-colors"
+                      className="w-full sm:w-80 pl-10 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:border-blue-500 focus:outline-none transition-colors"
                     />
                     <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
                       🔍
@@ -290,10 +286,10 @@ const Dashboard: React.FC<Props> = ({ token, onUnauthorized }) => {
         {/* Connection Status */}
         <div className="flex items-center justify-center mt-8">
           <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium
-                          ${connectionStatus === 'Connected' 
-                            ? 'bg-green-100 text-green-800 border border-green-200' 
+                          ${connectionStatus === 'Connected'
+                            ? 'bg-blue-50 text-blue-700 border border-blue-200'
                             : 'bg-orange-100 text-orange-800 border border-orange-200'}`}>
-            <div className={`w-2 h-2 rounded-full ${connectionStatus === 'Connected' ? 'bg-green-500 animate-pulse' : 'bg-orange-500'}`}></div>
+            <div className={`w-2 h-2 rounded-full ${connectionStatus === 'Connected' ? 'bg-blue-500 animate-pulse' : 'bg-orange-500'}`}></div>
             <span>Connection Status: {connectionStatus}</span>
           </div>
         </div>
@@ -321,7 +317,7 @@ return (
                 .map(([deviceName, device]) => (
                   <div
                     key={deviceName}
-                    className="bg-gray-100 rounded-2xl p-6 transform transition-all duration-200 hover:scale-105 hover:shadow-2xl border border-gray-200 mt-8 mx-8"
+                    className="bg-white rounded-2xl p-6 transition-all duration-200 hover:shadow-lg border border-blue-100 shadow-sm mt-8 mx-8"
                   >
                     <DeviceComponent
                       name={device.name}

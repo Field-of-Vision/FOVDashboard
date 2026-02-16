@@ -28,7 +28,7 @@ export default function ChampionRelay({ data, wsConnected = true }: ChampionRela
       className="
         fixed top-4 right-4 z-50
         flex items-center gap-2
-        bg-white/90 backdrop-blur-sm shadow rounded-lg
+        bg-white shadow-sm rounded-xl border border-blue-100
         px-3 py-2 text-sm"
     >
       <ActivitySquareIcon className="w-4 h-4 text-gray-600" />

@@ -40,7 +40,7 @@ export default function LoginForm({ onLogin }: Props) {
   return (
       <form
         onSubmit={handleSubmit}
-        className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-sm p-6 sm:p-8"
+        className="w-full max-w-md bg-white border border-blue-100 rounded-2xl shadow-xl p-6 sm:p-8"
       >
         <h1 className="text-2xl font-semibold text-slate-900 mb-1">Login</h1>
         <p className="text-sm text-slate-500 mb-6">Sign in to your stadium dashboard</p>
@@ -51,7 +51,7 @@ export default function LoginForm({ onLogin }: Props) {
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             placeholder="e.g. aviva, marvel, or admin"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             autoFocus
           />
         </label>
@@ -63,7 +63,7 @@ export default function LoginForm({ onLogin }: Props) {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="Enter password"
-            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+            className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
           />
         </label>
 
@@ -76,7 +76,7 @@ export default function LoginForm({ onLogin }: Props) {
         <button
           type="submit"
           disabled={loading}
-          className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          className="mt-6 inline-flex w-full items-center justify-center rounded-xl bg-blue-600 px-4 py-2.5 font-medium text-white hover:bg-blue-700 disabled:opacity-60"
         >
           {loading ? "Signing in…" : "Login"}
         </button>

@@ -28,7 +28,7 @@ export default function App() {
         onClick={handleLogout}
         aria-label="Logout"
         title="Logout"
-        className="fixed bottom-4 left-4 z-[999] px-3 py-2 rounded-xl border shadow bg-gray-100 font-semibold"
+        className="fixed bottom-4 left-4 z-[999] px-4 py-2 rounded-xl border border-blue-200 shadow-md bg-white text-blue-700 font-semibold hover:bg-blue-50 transition-colors"
       >
         Logout
       </button>
