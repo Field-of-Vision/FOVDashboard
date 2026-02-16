@@ -6,9 +6,9 @@
 #   ./aws-redeploy.sh <public-ip> --key path/to/key.pem
 #
 # What it does:
-#   1. Rsync code to the server (excludes node_modules, .git, .env, certs, *.db, venv)
-#   2. Reinstall backend dependencies (if requirements.txt changed)
-#   3. Rebuild frontend
+#   1. Build frontend locally (t3.micro doesn't have enough RAM)
+#   2. Rsync code + build to the server (excludes node_modules, .git, .env, certs, *.db, venv)
+#   3. Reinstall backend dependencies (if requirements.txt changed)
 #   4. Restart services
 #   5. Health check
 
@@ -44,8 +44,23 @@ echo "Target: ${REMOTE_USER}@${REMOTE_HOST}"
 echo "Key:    ${SSH_KEY}"
 echo ""
 
-# --- Step 1: Sync code ---
-echo_step "Syncing code..."
+# --- Step 1: Build frontend locally ---
+echo_step "Building frontend locally..."
+cd "$SCRIPT_DIR/client"
+
+# Set production env for the target IP
+cat > .env.production <<EOF
+REACT_APP_WS_BASE=ws://${REMOTE_HOST}
+REACT_APP_API_BASE=http://${REMOTE_HOST}
+EOF
+
+npm install --legacy-peer-deps --silent 2>&1 | tail -3
+npm run build
+echo "  Frontend built"
+cd "$SCRIPT_DIR"
+
+# --- Step 2: Sync code + build ---
+echo_step "Syncing code to server..."
 rsync -avz --delete \
     --exclude 'node_modules' \
     --exclude '.git' \
@@ -54,13 +69,14 @@ rsync -avz --delete \
     --exclude 'app/.env' \
     --exclude 'app/certs' \
     --exclude 'client/.env.production' \
+    --exclude 'client/node_modules' \
     -e "ssh $SSH_OPTS" \
     "$SCRIPT_DIR/" "${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_DIR}/"
 
-echo "  Code synced"
+echo "  Code synced (including pre-built frontend)"
 
-# --- Step 2: Rebuild on server ---
-echo_step "Rebuilding on server..."
+# --- Step 3: Update backend + restart on server ---
+echo_step "Updating server..."
 ssh $SSH_OPTS "${REMOTE_USER}@${REMOTE_HOST}" bash <<REMOTE_EOF
 set -euo pipefail
 
@@ -69,11 +85,6 @@ cd ${REMOTE_DIR}/app
 source venv/bin/activate
 pip install -q -r requirements.txt
 deactivate
-
-echo "--- Frontend build ---"
-cd ${REMOTE_DIR}/client
-npm install --silent --legacy-peer-deps
-npm run build
 
 echo "--- Fix permissions ---"
 sudo chown -R www-data:www-data ${REMOTE_DIR}
